@@ -4,6 +4,7 @@ import {
   Filter,
   GitBranch,
   GitCommit,
+  GitCompare,
   Plus,
   RefreshCcw,
   MessageSquarePlus,
@@ -19,6 +20,7 @@ import {
   createTicket,
   getAdminTicket,
   getDemoUserRole,
+  getGitRepoDiff,
   getMe,
   getRequestTypes,
   getTicket,
@@ -32,6 +34,8 @@ import type { DemoUserRole } from "./api";
 import type {
   ArgoCdApplicationSummary,
   ArgoCdDashboardTotals,
+  BranchDiffDashboard,
+  BranchDiffMicroservice,
   CustomerStage,
   PortalUser,
   RequestTypeDefinition,
@@ -39,7 +43,7 @@ import type {
   TicketSummary
 } from "../server/types";
 
-type ActiveTab = "tickets" | "argocd";
+type ActiveTab = "tickets" | "argocd" | "gitdiff";
 
 const stages: Array<CustomerStage | ""> = [
   "",
@@ -115,6 +119,8 @@ export function App() {
   const [adminTickets, setAdminTickets] = useState<TicketSummary[]>([]);
   const [argoApplications, setArgoApplications] = useState<ArgoCdApplicationSummary[]>([]);
   const [argoTotals, setArgoTotals] = useState<ArgoCdDashboardTotals>(emptyArgoTotals);
+  const [branchDiff, setBranchDiff] = useState<BranchDiffDashboard | null>(null);
+  const [selectedBranchService, setSelectedBranchService] = useState<string>("");
   const [selectedTicket, setSelectedTicket] = useState<TicketDetail | null>(null);
   const [selectedAdminTicket, setSelectedAdminTicket] = useState<TicketDetail | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("tickets");
@@ -126,8 +132,10 @@ export function App() {
   const [developerUnreadTicketIds, setDeveloperUnreadTicketIds] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [argoLoading, setArgoLoading] = useState(false);
+  const [branchDiffLoading, setBranchDiffLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [argoError, setArgoError] = useState<string | null>(null);
+  const [branchDiffError, setBranchDiffError] = useState<string | null>(null);
 
   async function refreshTickets() {
     const result = await listTickets({ scope: "mine" });
@@ -159,6 +167,20 @@ export function App() {
       setArgoError(err instanceof Error ? err.message : "Failed to load Argo CD projects");
     } finally {
       setArgoLoading(false);
+    }
+  }
+
+  async function refreshBranchDiff() {
+    setBranchDiffLoading(true);
+    setBranchDiffError(null);
+    try {
+      const result = await getGitRepoDiff();
+      setBranchDiff(result);
+      setSelectedBranchService((current) => current || result.microservices[0]?.name || "");
+    } catch (err) {
+      setBranchDiffError(err instanceof Error ? err.message : "Failed to load branch diff");
+    } finally {
+      setBranchDiffLoading(false);
     }
   }
 
@@ -234,6 +256,13 @@ export function App() {
       .finally(() => setArgoLoading(false));
   }, [activeTab, argoApplications.length, argoLoading]);
 
+  useEffect(() => {
+    if (activeTab !== "gitdiff" || branchDiff || branchDiffLoading) {
+      return;
+    }
+    refreshBranchDiff();
+  }, [activeTab, branchDiff, branchDiffLoading]);
+
   async function openTicket(id: string) {
     setError(null);
     setDeveloperUnreadTicketIds((current) => removeFromSet(current, id));
@@ -281,6 +310,10 @@ export function App() {
   const doneTickets = useMemo(() => tickets.filter(isDone), [tickets]);
   const activeAdminTickets = useMemo(() => adminTickets.filter((ticket) => !isDone(ticket)), [adminTickets]);
   const doneAdminTickets = useMemo(() => adminTickets.filter(isDone), [adminTickets]);
+  const selectedBranchDiffService = useMemo(
+    () => branchDiff?.microservices.find((service) => service.name === selectedBranchService) ?? branchDiff?.microservices[0],
+    [branchDiff, selectedBranchService]
+  );
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -294,6 +327,10 @@ export function App() {
           <button className={activeTab === "argocd" ? "nav-button active" : "nav-button"} onClick={() => setActiveTab("argocd")}>
             <GitBranch aria-hidden="true" />
             Argo CD
+          </button>
+          <button className={activeTab === "gitdiff" ? "nav-button active" : "nav-button"} onClick={() => setActiveTab("gitdiff")}>
+            <GitCompare aria-hidden="true" />
+            Microservice Branch Diff
           </button>
         </nav>
 
@@ -318,6 +355,8 @@ export function App() {
             onClick={() =>
               activeTab === "argocd"
                 ? refreshArgoCdProjects()
+                : activeTab === "gitdiff"
+                  ? refreshBranchDiff()
                 : loadPortalData().catch((err: Error) => setError(err.message))
             }
           >
@@ -328,7 +367,7 @@ export function App() {
 
       <main className="main">
         <header className="topbar">
-          <h1>{activeTab === "argocd" ? "Argo CD" : isAdmin ? "Queue" : "Tasks"}</h1>
+          <h1>{activeTab === "argocd" ? "Argo CD" : activeTab === "gitdiff" ? "Microservice Branch Diff" : isAdmin ? "Queue" : "Tasks"}</h1>
           {activeTab === "tickets" && !isAdmin && (
             <button className="primary" onClick={() => setIsCreateOpen(true)}>
               <Plus size={18} aria-hidden="true" /> New
@@ -343,6 +382,15 @@ export function App() {
             applications={argoApplications}
             totals={argoTotals}
             onRefresh={refreshArgoCdProjects}
+          />
+        ) : activeTab === "gitdiff" ? (
+          <BranchDiffView
+            dashboard={branchDiff}
+            error={branchDiffError}
+            loading={branchDiffLoading}
+            selectedService={selectedBranchDiffService}
+            onRefresh={refreshBranchDiff}
+            onSelectService={setSelectedBranchService}
           />
         ) : (
         <>
@@ -631,6 +679,222 @@ function SimpleArgoAppBox({ app }: { app: ArgoCdApplicationSummary }) {
         {app.links.commit && <a href={app.links.commit} target="_blank" rel="noreferrer"><GitCommit size={15} aria-hidden="true" /> Commit</a>}
         <a href={app.links.argoCd} target="_blank" rel="noreferrer"><ExternalLink size={15} aria-hidden="true" /> Argo CD</a>
       </div>
+    </article>
+  );
+}
+
+type BranchDiffFilter = "all" | "template" | "values" | "high" | "prod" | "missing" | "secure" | "image" | "routeSecurity";
+
+function riskClass(risk: string) {
+  return `diff-risk diff-risk-${risk}`;
+}
+
+function BranchDiffView({
+  dashboard,
+  error,
+  loading,
+  onRefresh,
+  onSelectService,
+  selectedService
+}: {
+  dashboard: BranchDiffDashboard | null;
+  error: string | null;
+  loading: boolean;
+  onRefresh: () => Promise<void>;
+  onSelectService: (name: string) => void;
+  selectedService?: BranchDiffMicroservice;
+}) {
+  const [filter, setFilter] = useState<BranchDiffFilter>("all");
+  const filters: Array<{ id: BranchDiffFilter; label: string }> = [
+    { id: "all", label: "All" },
+    { id: "template", label: "Template changes" },
+    { id: "values", label: "Values changes" },
+    { id: "high", label: "High risk" },
+    { id: "prod", label: "Production differences" },
+    { id: "missing", label: "Missing services" },
+    { id: "secure", label: "Secure-prd differences" },
+    { id: "image", label: "Image differences" },
+    { id: "routeSecurity", label: "Route/security/RBAC" }
+  ];
+
+  const filteredServices = useMemo(() => {
+    if (!dashboard) return [];
+    return dashboard.microservices.filter((service) => {
+      if (filter === "template") return service.templateDrift;
+      if (filter === "values") return service.valuesDrift;
+      if (filter === "high") return service.riskLevel === "high";
+      if (filter === "prod") return service.productionDifference;
+      if (filter === "missing") return service.missingBranches.length > 0;
+      if (filter === "secure") return service.secureDifference;
+      if (filter === "image") return service.badges.includes("Image differs");
+      if (filter === "routeSecurity") return service.badges.some((badge) => ["Route changed", "Security changed", "NetworkPolicy changed"].includes(badge));
+      return true;
+    });
+  }, [dashboard, filter]);
+
+  if (error) {
+    return (
+      <div className="error-banner">
+        {error}
+        <button className="ghost-button" onClick={() => onRefresh()}>
+          <RefreshCcw size={16} aria-hidden="true" /> Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (loading || !dashboard) {
+    return <div className="empty-state">Loading branch comparison...</div>;
+  }
+
+  return (
+    <div className="branch-diff-space">
+      <section className="branch-diff-toolbar">
+        <div>
+          <span>App</span>
+          <strong>{dashboard.app}</strong>
+        </div>
+        <div>
+          <span>Baseline branch</span>
+          <strong>{dashboard.baselineBranch}</strong>
+        </div>
+        <div>
+          <span>Compare branches</span>
+          <strong>{dashboard.branches.filter((branch) => branch !== dashboard.baselineBranch).join(", ")}</strong>
+        </div>
+      </section>
+
+      <section className="branch-summary" aria-label="Branch diff summary">
+        <div><span>Branches</span><strong>{dashboard.summary.totalBranches}</strong></div>
+        <div><span>Microservices</span><strong>{dashboard.summary.totalMicroservices}</strong></div>
+        <div><span>Same</span><strong>{dashboard.summary.sameAcrossAllBranches}</strong></div>
+        <div><span>Values drift</span><strong>{dashboard.summary.valuesDrift}</strong></div>
+        <div><span>Template drift</span><strong>{dashboard.summary.templateDrift}</strong></div>
+        <div><span>Missing</span><strong>{dashboard.summary.missingMicroservices}</strong></div>
+        <div><span>High risk</span><strong>{dashboard.summary.highRiskDifferences}</strong></div>
+        <div><span>Prod drift</span><strong>{dashboard.summary.productionDifferences}</strong></div>
+        <div><span>Secure drift</span><strong>{dashboard.summary.secureNetworkDifferences}</strong></div>
+      </section>
+
+      <section className="argo-controls">
+        <div className="argo-quick-filters">
+          {filters.map((item) => (
+            <button className={filter === item.id ? "active" : ""} key={item.id} onClick={() => setFilter(item.id)}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <div className="branch-diff-layout">
+        <section className="branch-matrix">
+          <div className="branch-matrix-header">
+            <span>Microservice</span>
+            {dashboard.branches.map((branch) => <span key={branch}>{branch.replace("payments-", "")}</span>)}
+            <span>Drift</span>
+            <span>Risk</span>
+          </div>
+          {filteredServices.map((service) => (
+            <button
+              className={selectedService?.name === service.name ? "branch-row selected" : "branch-row"}
+              key={service.name}
+              onClick={() => onSelectService(service.name)}
+            >
+              <strong>{service.name}</strong>
+              {dashboard.branches.map((branch) => {
+                const snapshot = service.branches[branch];
+                return (
+                  <span className={snapshot.exists ? "branch-cell" : "branch-cell missing"} key={branch}>
+                    {snapshot.exists ? (
+                      <>
+                        <b>{snapshot.imageTag ?? "no image"}</b>
+                        <small>{snapshot.replicaCount ?? "-"} replicas</small>
+                      </>
+                    ) : (
+                      <b>Missing</b>
+                    )}
+                  </span>
+                );
+              })}
+              <span className="branch-badges">
+                {service.badges.slice(0, 3).map((badge) => <em key={badge}>{badge}</em>)}
+              </span>
+              <span className={riskClass(service.riskLevel)}>{service.riskLevel}</span>
+            </button>
+          ))}
+          {filteredServices.length === 0 && <div className="empty-state">No microservices match this filter.</div>}
+        </section>
+
+        <section className="branch-detail detail-panel">
+          {selectedService ? (
+            <BranchServiceDetail dashboard={dashboard} service={selectedService} />
+          ) : (
+            <div className="empty-state">Select a microservice.</div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function BranchServiceDetail({ dashboard, service }: { dashboard: BranchDiffDashboard; service: BranchDiffMicroservice }) {
+  return (
+    <article className="branch-service-detail">
+      <div className="detail-heading">
+        <div>
+          <span className={riskClass(service.riskLevel)}>{service.riskLevel}</span>
+          <h2>{service.name}</h2>
+          <p>{service.badges.join(" / ")}</p>
+        </div>
+      </div>
+
+      <section>
+        <h3>Summary</h3>
+        <div className="branch-summary-list">
+          {service.summary.map((item) => <div key={item}>{item}</div>)}
+        </div>
+      </section>
+
+      <section>
+        <h3>Important fields</h3>
+        <div className="important-fields">
+          <div className="important-fields-header">
+            <span>Field</span>
+            {dashboard.branches.map((branch) => <span key={branch}>{branch.replace("payments-", "")}</span>)}
+            <span>Risk</span>
+          </div>
+          {service.importantFields.map((field) => (
+            <div className="important-field-row" key={field.field}>
+              <strong>{field.field}</strong>
+              {dashboard.branches.map((branch) => <span key={branch}>{field.values[branch]}</span>)}
+              <span className={riskClass(field.risk)}>{field.risk}</span>
+            </div>
+          ))}
+          {service.importantFields.length === 0 && <div className="empty-state">No important field drift.</div>}
+        </div>
+      </section>
+
+      <section className="branch-detail-grid">
+        <div>
+          <h3>Values diff</h3>
+          {service.valuesDiffs.map((item) => <p key={item}>{item}</p>)}
+          {service.valuesDiffs.length === 0 && <p>No values drift.</p>}
+        </div>
+        <div>
+          <h3>Template diff</h3>
+          {service.templateDiffs.map((item) => <p key={item}>{item}</p>)}
+          {service.templateDiffs.length === 0 && <p>No template drift.</p>}
+        </div>
+        <div>
+          <h3>Resource diff</h3>
+          {service.resourceDiffs.map((item) => <p key={item}>{item}</p>)}
+          {service.resourceDiffs.length === 0 && <p>No resource drift.</p>}
+        </div>
+        <div>
+          <h3>Raw YAML</h3>
+          <p>Advanced raw YAML diff is intentionally secondary in this MVP.</p>
+        </div>
+      </section>
     </article>
   );
 }

@@ -1,6 +1,7 @@
 import type {
   AdminTicketUpdate,
   ArgoCdDashboard,
+  BranchDiffDashboard,
   PortalUser,
   RequestTypeDefinition,
   TicketDetail,
@@ -73,6 +74,10 @@ export function getRequestTypes() {
 
 export function listArgoCdProjects() {
   return request<ArgoCdDashboard>("/api/argocd/projects");
+}
+
+export function getGitRepoDiff() {
+  return request<BranchDiffDashboard>("/api/git-repo-diff");
 }
 
 export function listTickets(params: { scope: "mine" | "team"; status?: string; query?: string }) {

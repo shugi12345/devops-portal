@@ -969,6 +969,247 @@ button:focus-visible {
   color: #ffffff;
 }
 
+.branch-diff-space {
+  display: grid;
+  gap: 14px;
+}
+
+.branch-diff-toolbar,
+.branch-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.branch-diff-toolbar {
+  grid-template-columns: 180px 220px minmax(0, 1fr);
+}
+
+.branch-diff-toolbar div,
+.branch-summary div {
+  border: 1px solid #202b31;
+  border-radius: 6px;
+  background: #12191d;
+  padding: 12px;
+  min-width: 0;
+}
+
+.branch-diff-toolbar span,
+.branch-summary span {
+  display: block;
+  color: #84949b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.branch-diff-toolbar strong,
+.branch-summary strong {
+  display: block;
+  color: #ffffff;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.branch-summary {
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+}
+
+.branch-summary strong {
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.branch-diff-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.branch-matrix,
+.branch-detail {
+  min-width: 0;
+}
+
+.branch-matrix {
+  border: 1px solid #202b31;
+  border-radius: 6px;
+  background: #12191d;
+  overflow: auto;
+}
+
+.branch-matrix-header,
+.branch-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.1fr) repeat(4, minmax(120px, 1fr)) minmax(150px, 1.1fr) 80px;
+  gap: 8px;
+  align-items: stretch;
+  min-width: 980px;
+}
+
+.branch-matrix-header {
+  border-bottom: 1px solid #202b31;
+  padding: 10px 12px;
+  color: #84949b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.branch-row {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid #202b31;
+  background: transparent;
+  color: #f4f7f8;
+  padding: 12px;
+  text-align: left;
+}
+
+.branch-row:hover,
+.branch-row.selected {
+  background: #132225;
+}
+
+.branch-row.selected {
+  box-shadow: inset 3px 0 0 #20c7bd;
+}
+
+.branch-row > strong {
+  color: #ffffff;
+  overflow-wrap: anywhere;
+}
+
+.branch-cell {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #25353b;
+  border-radius: 6px;
+  background: #0d1518;
+  padding: 8px;
+}
+
+.branch-cell b {
+  color: #edf3f5;
+  overflow-wrap: anywhere;
+}
+
+.branch-cell small {
+  color: #84949b;
+}
+
+.branch-cell.missing {
+  border-color: #5d272d;
+  background: #211315;
+}
+
+.branch-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.branch-badges em {
+  border-radius: 999px;
+  background: #253038;
+  color: #dfe8eb;
+  padding: 4px 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.diff-risk {
+  width: max-content;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.diff-risk-low {
+  background: #203922;
+  color: #b7e0b8;
+}
+
+.diff-risk-medium {
+  background: #3d321c;
+  color: #ead49f;
+}
+
+.diff-risk-high {
+  background: #5d272d;
+  color: #ffc6ca;
+}
+
+.branch-service-detail {
+  display: grid;
+  gap: 16px;
+}
+
+.branch-summary-list {
+  display: grid;
+  gap: 7px;
+}
+
+.branch-summary-list div {
+  border: 1px solid #25353b;
+  border-radius: 6px;
+  background: #0d1518;
+  color: #dbe4e7;
+  padding: 9px 10px;
+}
+
+.important-fields {
+  display: grid;
+  overflow: auto;
+}
+
+.important-fields-header,
+.important-field-row {
+  display: grid;
+  grid-template-columns: 150px repeat(4, minmax(110px, 1fr)) 78px;
+  gap: 8px;
+  min-width: 760px;
+}
+
+.important-fields-header {
+  color: #84949b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  padding-bottom: 8px;
+}
+
+.important-field-row {
+  border-top: 1px solid #202b31;
+  padding: 8px 0;
+}
+
+.important-field-row strong,
+.important-field-row span {
+  overflow-wrap: anywhere;
+}
+
+.branch-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.branch-detail-grid div {
+  border: 1px solid #202b31;
+  border-radius: 6px;
+  background: #0f171a;
+  padding: 12px;
+}
+
+.branch-detail-grid p {
+  color: #c8d3d7;
+  margin-bottom: 8px;
+}
+
 .argo-quick-filters {
   display: flex;
   flex-wrap: wrap;
@@ -1422,6 +1663,10 @@ button:focus-visible {
   .workspace-grid.has-selection,
   .create-grid,
   .simple-app-grid,
+  .branch-diff-toolbar,
+  .branch-summary,
+  .branch-diff-layout,
+  .branch-detail-grid,
   .argo-dashboard-grid,
   .argo-filter-grid,
   .argo-detail-grid,

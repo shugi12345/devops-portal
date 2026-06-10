@@ -3,6 +3,7 @@ import express from "express";
 import { z } from "zod";
 import { listArgoCdProjects } from "./argocd";
 import { requestCatalog } from "./catalog";
+import { getBranchDiffDashboard } from "./gitRepoDiff";
 import { isAdmin, requireAdmin, requireSession } from "./auth";
 import { customerStages } from "./status";
 import { InMemoryTicketingApi } from "./ticketing/InMemoryTicketingApi";
@@ -51,6 +52,14 @@ export function createApp(ticketingApi: TicketingApi = new InMemoryTicketingApi(
     try {
       const dashboard = await listArgoCdProjects(req);
       res.json(dashboard);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/git-repo-diff", (_req, res, next) => {
+    try {
+      res.json(getBranchDiffDashboard());
     } catch (error) {
       next(error);
     }

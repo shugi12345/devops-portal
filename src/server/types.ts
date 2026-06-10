@@ -203,6 +203,69 @@ export type ArgoCdInstanceSummary = {
   authMode: "token" | "basic" | "sso";
 };
 
+export type BranchDiffRisk = "low" | "medium" | "high";
+
+export type BranchMicroserviceSnapshot = {
+  exists: boolean;
+  templatePath?: string;
+  valuesPath?: string;
+  templateHash?: string;
+  valuesHash?: string;
+  imageRepository?: string;
+  imageTag?: string;
+  replicaCount?: number;
+  routeHost?: string;
+  resources?: string[];
+  kinds?: string[];
+  hasNetworkPolicy?: boolean;
+  hasSecurityContext?: boolean;
+  serviceAccountName?: string;
+  hpa?: {
+    minReplicas?: number;
+    maxReplicas?: number;
+  };
+};
+
+export type BranchDiffMicroservice = {
+  name: string;
+  branches: Record<string, BranchMicroserviceSnapshot>;
+  summary: string[];
+  importantFields: Array<{
+    field: string;
+    values: Record<string, string>;
+    risk: BranchDiffRisk;
+  }>;
+  valuesDiffs: string[];
+  templateDiffs: string[];
+  resourceDiffs: string[];
+  riskLevel: BranchDiffRisk;
+  templateDrift: boolean;
+  valuesDrift: boolean;
+  missingBranches: string[];
+  productionDifference: boolean;
+  secureDifference: boolean;
+  badges: string[];
+};
+
+export type BranchDiffDashboard = {
+  app: string;
+  branches: string[];
+  baselineBranch: string;
+  lastScannedAt: string;
+  summary: {
+    totalBranches: number;
+    totalMicroservices: number;
+    sameAcrossAllBranches: number;
+    valuesDrift: number;
+    templateDrift: number;
+    missingMicroservices: number;
+    highRiskDifferences: number;
+    productionDifferences: number;
+    secureNetworkDifferences: number;
+  };
+  microservices: BranchDiffMicroservice[];
+};
+
 export interface TicketingApi {
   createTicket(input: CreateTicketInput, requester: PortalUser): Promise<TicketDetail>;
   listTickets(user: PortalUser, filters: TicketFilters): Promise<TicketSummary[]>;
