@@ -1,11 +1,14 @@
 import {
   CheckCircle2,
-  ShieldCheck,
+  ExternalLink,
   Filter,
+  GitBranch,
+  GitCommit,
   Plus,
   RefreshCcw,
   MessageSquarePlus,
   Send,
+  ShieldCheck,
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -19,13 +22,24 @@ import {
   getMe,
   getRequestTypes,
   getTicket,
+  listArgoCdProjects,
   listAdminTickets,
   listTickets,
   setDemoUserRole,
   updateAdminTicket
 } from "./api";
 import type { DemoUserRole } from "./api";
-import type { CustomerStage, PortalUser, RequestTypeDefinition, TicketDetail, TicketSummary } from "../server/types";
+import type {
+  ArgoCdApplicationSummary,
+  ArgoCdDashboardTotals,
+  CustomerStage,
+  PortalUser,
+  RequestTypeDefinition,
+  TicketDetail,
+  TicketSummary
+} from "../server/types";
+
+type ActiveTab = "tickets" | "argocd";
 
 const stages: Array<CustomerStage | ""> = [
   "",
@@ -45,6 +59,21 @@ const devopsAdmins = [
 ];
 
 const statusMessagePrefix = "[status] ";
+
+const emptyArgoTotals: ArgoCdDashboardTotals = {
+  applications: 0,
+  outOfSync: 0,
+  degraded: 0,
+  criticalApps: 0,
+  prodApps: 0,
+  autoSyncEnabled: 0,
+  waitingForSync: 0,
+  failedSync: 0,
+  openPrs: 0,
+  notOnBaseline: 0,
+  chartDrift: 0,
+  productionRisks: 0
+};
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -84,8 +113,11 @@ export function App() {
   const [requestTypes, setRequestTypes] = useState<RequestTypeDefinition[]>([]);
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
   const [adminTickets, setAdminTickets] = useState<TicketSummary[]>([]);
+  const [argoApplications, setArgoApplications] = useState<ArgoCdApplicationSummary[]>([]);
+  const [argoTotals, setArgoTotals] = useState<ArgoCdDashboardTotals>(emptyArgoTotals);
   const [selectedTicket, setSelectedTicket] = useState<TicketDetail | null>(null);
   const [selectedAdminTicket, setSelectedAdminTicket] = useState<TicketDetail | null>(null);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("tickets");
   const [isAdmin, setIsAdmin] = useState(false);
   const [demoRole, setDemoRole] = useState<DemoUserRole>(() => getDemoUserRole());
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -93,7 +125,9 @@ export function App() {
   const [adminUnreadTicketIds, setAdminUnreadTicketIds] = useState<Set<string>>(() => new Set());
   const [developerUnreadTicketIds, setDeveloperUnreadTicketIds] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
+  const [argoLoading, setArgoLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [argoError, setArgoError] = useState<string | null>(null);
 
   async function refreshTickets() {
     const result = await listTickets({ scope: "mine" });
@@ -111,6 +145,20 @@ export function App() {
     setAdminTickets(result.tickets);
     if (selectedAdminTicket && !result.tickets.some((ticket) => ticket.id === selectedAdminTicket.id)) {
       setSelectedAdminTicket(null);
+    }
+  }
+
+  async function refreshArgoCdProjects() {
+    setArgoLoading(true);
+    setArgoError(null);
+    try {
+      const result = await listArgoCdProjects();
+      setArgoApplications(result.applications);
+      setArgoTotals(result.totals);
+    } catch (err) {
+      setArgoError(err instanceof Error ? err.message : "Failed to load Argo CD projects");
+    } finally {
+      setArgoLoading(false);
     }
   }
 
@@ -172,6 +220,20 @@ export function App() {
     return () => window.clearTimeout(handle);
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (activeTab !== "argocd" || argoApplications.length > 0 || argoLoading) {
+      return;
+    }
+    setArgoLoading(true);
+    listArgoCdProjects()
+      .then((dashboard) => {
+        setArgoApplications(dashboard.applications);
+        setArgoTotals(dashboard.totals);
+      })
+      .catch((err: Error) => setArgoError(err.message))
+      .finally(() => setArgoLoading(false));
+  }, [activeTab, argoApplications.length, argoLoading]);
+
   async function openTicket(id: string) {
     setError(null);
     setDeveloperUnreadTicketIds((current) => removeFromSet(current, id));
@@ -219,16 +281,19 @@ export function App() {
   const doneTickets = useMemo(() => tickets.filter(isDone), [tickets]);
   const activeAdminTickets = useMemo(() => adminTickets.filter((ticket) => !isDone(ticket)), [adminTickets]);
   const doneAdminTickets = useMemo(() => adminTickets.filter(isDone), [adminTickets]);
-
   return (
     <div className="app-shell">
       <header className="app-header">
         <div className="brand">DevOps</div>
 
         <nav className="app-nav" aria-label="Primary navigation">
-          <button className="nav-button active">
+          <button className={activeTab === "tickets" ? "nav-button active" : "nav-button"} onClick={() => setActiveTab("tickets")}>
             {isAdmin ? <ShieldCheck aria-hidden="true" /> : <Filter aria-hidden="true" />}
             {isAdmin ? "Admin Queue" : "Tickets"}
+          </button>
+          <button className={activeTab === "argocd" ? "nav-button active" : "nav-button"} onClick={() => setActiveTab("argocd")}>
+            <GitBranch aria-hidden="true" />
+            Argo CD
           </button>
         </nav>
 
@@ -248,7 +313,14 @@ export function App() {
             </div>
           </div>
 
-          <button className="ghost-button" onClick={() => loadPortalData().catch((err: Error) => setError(err.message))}>
+          <button
+            className="ghost-button"
+            onClick={() =>
+              activeTab === "argocd"
+                ? refreshArgoCdProjects()
+                : loadPortalData().catch((err: Error) => setError(err.message))
+            }
+          >
             <RefreshCcw size={17} aria-hidden="true" /> Refresh
           </button>
         </div>
@@ -256,14 +328,24 @@ export function App() {
 
       <main className="main">
         <header className="topbar">
-          <h1>{isAdmin ? "Queue" : "Tasks"}</h1>
-          {!isAdmin && (
+          <h1>{activeTab === "argocd" ? "Argo CD" : isAdmin ? "Queue" : "Tasks"}</h1>
+          {activeTab === "tickets" && !isAdmin && (
             <button className="primary" onClick={() => setIsCreateOpen(true)}>
               <Plus size={18} aria-hidden="true" /> New
             </button>
           )}
         </header>
 
+        {activeTab === "argocd" ? (
+          <ArgoCdView
+            loading={argoLoading}
+            error={argoError}
+            applications={argoApplications}
+            totals={argoTotals}
+            onRefresh={refreshArgoCdProjects}
+          />
+        ) : (
+        <>
         {error && <div className="error-banner">{error}</div>}
         {loading ? (
           <div className="empty-state">Loading...</div>
@@ -387,8 +469,10 @@ export function App() {
             </div>
           </div>
         )}
+        </>
+        )}
 
-        {isCreateOpen && !isAdmin && (
+        {isCreateOpen && activeTab === "tickets" && !isAdmin && (
           <div className="modal-backdrop" role="presentation">
             <section className="modal" role="dialog" aria-modal="true" aria-labelledby="create-ticket-title">
               <div className="modal-heading">
@@ -403,6 +487,151 @@ export function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function argoStatusClass(value: string) {
+  return `argo-badge argo-${value.toLowerCase().replaceAll(" ", "-")}`;
+}
+
+function argoEnvClass(value: string) {
+  return `argo-badge argo-env-${value}`;
+}
+
+function formatMaybeDate(value?: string) {
+  return value ? formatDate(value) : "Never";
+}
+
+function shortHash(value: string) {
+  return value && value !== "HEAD" ? value.slice(0, 7) : value || "Unknown";
+}
+
+type ArgoQuickFilter = "all" | "prod" | "outofsync" | "failed";
+
+function ArgoCdView({
+  applications,
+  error,
+  loading,
+  onRefresh,
+  totals
+}: {
+  applications: ArgoCdApplicationSummary[];
+  error: string | null;
+  loading: boolean;
+  onRefresh: () => Promise<void>;
+  totals: ArgoCdDashboardTotals;
+}) {
+  const [quickFilter, setQuickFilter] = useState<ArgoQuickFilter>("all");
+
+  const filteredApplications = useMemo(() => {
+    return applications.filter((app) => {
+      if (quickFilter === "prod" && app.environment !== "prd") return false;
+      if (quickFilter === "outofsync" && app.syncStatus !== "OutOfSync") return false;
+      if (quickFilter === "failed" && app.lastSyncResult !== "Failed" && app.lastSyncResult !== "Error") return false;
+      return true;
+    });
+  }, [applications, quickFilter]);
+
+  const quickFilters: Array<{ id: ArgoQuickFilter; label: string }> = [
+    { id: "all", label: "All" },
+    { id: "prod", label: "PRD only" },
+    { id: "outofsync", label: "OutOfSync" },
+    { id: "failed", label: "Failed sync" }
+  ];
+
+  return (
+    <div className="argo-space">
+      {error && (
+        <div className="error-banner">
+          {error}
+          <button className="ghost-button" onClick={() => onRefresh()}>
+            <RefreshCcw size={16} aria-hidden="true" /> Retry
+          </button>
+        </div>
+      )}
+
+      <section className="argo-summary" aria-label="Argo CD summary">
+        <div className={totals.outOfSync > 0 ? "risk-card warning" : "risk-card"}>
+          <span>OutOfSync</span>
+          <strong>{totals.outOfSync}</strong>
+        </div>
+        <div>
+          <span>Applications</span>
+          <strong>{totals.applications}</strong>
+        </div>
+        <div>
+          <span>PRD apps</span>
+          <strong>{totals.prodApps}</strong>
+        </div>
+        <div>
+          <span>Failed sync</span>
+          <strong>{totals.failedSync}</strong>
+        </div>
+      </section>
+
+      {loading ? (
+        <div className="empty-state">Loading Argo CD...</div>
+      ) : applications.length === 0 ? (
+        <div className="empty-state">No Argo CD applications visible.</div>
+      ) : (
+        <>
+          <section className="argo-controls" aria-label="Argo CD filters">
+            <div className="argo-quick-filters">
+              {quickFilters.map((filter) => (
+                <button className={quickFilter === filter.id ? "active" : ""} key={filter.id} onClick={() => setQuickFilter(filter.id)}>
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <div className="simple-app-grid" aria-label="Argo CD applications">
+            {filteredApplications.map((app) => (
+              <SimpleArgoAppBox app={app} key={`${app.namespace}/${app.name}`} />
+            ))}
+            {filteredApplications.length === 0 && <div className="empty-state">No applications match the current filter.</div>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SimpleArgoAppBox({ app }: { app: ArgoCdApplicationSummary }) {
+  return (
+    <article className="simple-app-box">
+      <div className="simple-app-heading">
+        <div>
+          <strong>{app.name}</strong>
+          <small>{app.namespace} / {app.project}</small>
+        </div>
+        <span className={app.criticality === "critical" ? "argo-badge argo-danger" : "argo-badge"}>{app.criticality}</span>
+      </div>
+
+      <div className="simple-status-row">
+        <span className={argoEnvClass(app.environment)}>{app.environment.toUpperCase()}</span>
+        <span className={argoStatusClass(app.syncStatus)}>{app.syncStatus}</span>
+        <span className={argoStatusClass(app.healthStatus)}>{app.healthStatus}</span>
+        <span className={app.automated ? "argo-badge argo-auto" : "argo-badge"}>{app.syncMode}</span>
+      </div>
+
+      <dl className="simple-app-meta">
+        <div><dt>Chart</dt><dd>{app.chartName}</dd></div>
+        <div><dt>Chart version</dt><dd>{app.chartVersion}</dd></div>
+        <div><dt>Image</dt><dd>{app.desiredImage}</dd></div>
+        <div><dt>Repo</dt><dd>{app.repoName}</dd></div>
+        <div><dt>Branch</dt><dd>{app.targetRevision}</dd></div>
+        <div><dt>Commit</dt><dd>{shortHash(app.lastCommitHash)}</dd></div>
+        <div><dt>Last sync</dt><dd>{formatMaybeDate(app.lastSyncedAt)}</dd></div>
+        <div><dt>Sync result</dt><dd>{app.lastSyncResult}</dd></div>
+      </dl>
+
+      <div className="simple-app-actions">
+        {app.links.git && <a href={app.links.git} target="_blank" rel="noreferrer"><GitBranch size={15} aria-hidden="true" /> Repo</a>}
+        {app.links.commit && <a href={app.links.commit} target="_blank" rel="noreferrer"><GitCommit size={15} aria-hidden="true" /> Commit</a>}
+        <a href={app.links.argoCd} target="_blank" rel="noreferrer"><ExternalLink size={15} aria-hidden="true" /> Argo CD</a>
+      </div>
+    </article>
   );
 }
 

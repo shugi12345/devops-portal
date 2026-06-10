@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { z } from "zod";
+import { listArgoCdProjects } from "./argocd";
 import { requestCatalog } from "./catalog";
 import { isAdmin, requireAdmin, requireSession } from "./auth";
 import { customerStages } from "./status";
@@ -44,6 +45,15 @@ export function createApp(ticketingApi: TicketingApi = new InMemoryTicketingApi(
 
   app.get("/api/request-types", (_req, res) => {
     res.json({ requestTypes: requestCatalog });
+  });
+
+  app.get("/api/argocd/projects", async (req, res, next) => {
+    try {
+      const dashboard = await listArgoCdProjects(req);
+      res.json(dashboard);
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get("/api/tickets", async (req, res, next) => {
@@ -152,6 +162,10 @@ export function createApp(ticketingApi: TicketingApi = new InMemoryTicketingApi(
     }
     if (error instanceof Error && error.message === "Ticket not found") {
       res.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof Error && error.message.includes("Argo CD")) {
+      res.status(502).json({ error: error.message });
       return;
     }
     res.status(500).json({ error: "Unexpected server error" });

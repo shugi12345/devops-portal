@@ -83,6 +83,126 @@ export type AdminTicketUpdate = {
   teamGroups?: string[];
 };
 
+export type ArgoCdApplicationSummary = {
+  name: string;
+  namespace: string;
+  project: string;
+  environment: "dev" | "tst" | "preprod" | "prd" | "unknown";
+  team: string;
+  owner: string;
+  criticality: "regular" | "critical";
+  repoUrl: string;
+  repoName: string;
+  repoPathUrl: string;
+  commitUrl: string;
+  targetRevision: string;
+  path: string;
+  lastCommitHash: string;
+  lastCommitMessage: string;
+  lastCommitAuthor: string;
+  lastCommitAt?: string;
+  destinationServer: string;
+  destinationNamespace: string;
+  syncStatus: string;
+  healthStatus: string;
+  healthReason: string;
+  outOfSyncReason: string;
+  automated: boolean;
+  manualSyncRequired: boolean;
+  prune: boolean;
+  selfHeal: boolean;
+  allowEmpty: boolean;
+  lastSyncedAt?: string;
+  lastSyncResult: string;
+  lastSyncTriggeredBy: string;
+  lastSyncRevision: string;
+  lastSyncDurationSeconds?: number;
+  syncMode: "auto" | "manual";
+  chartName: string;
+  chartVersion: string;
+  baselineVersion: string;
+  baselineName: string;
+  baselineStatus: "ok" | "drift" | "override" | "unknown";
+  chartOverride: boolean;
+  overrideReason: string;
+  overrideExpiresAt?: string;
+  overrideApprovalOwner: string;
+  desiredImage: string;
+  liveImage: string;
+  imageDigest: string;
+  imageDrift: boolean;
+  openPrCount: number;
+  approvalStatus: "none" | "open" | "waiting-approval" | "approved-not-merged" | "merged-not-synced" | "synced";
+  lastApprovedPr: string;
+  prAuthor: string;
+  requiredReviewers: string[];
+  missingReviewers: string[];
+  riskScore: number;
+  riskWarnings: string[];
+  links: {
+    argoCd: string;
+    git: string;
+    commit: string;
+  };
+};
+
+export type ArgoCdDashboardTotals = {
+  applications: number;
+  outOfSync: number;
+  degraded: number;
+  criticalApps: number;
+  prodApps: number;
+  autoSyncEnabled: number;
+  waitingForSync: number;
+  failedSync: number;
+  openPrs: number;
+  notOnBaseline: number;
+  chartDrift: number;
+  productionRisks: number;
+};
+
+export type ArgoCdPromotionGroup = {
+  name: string;
+  environments: Array<{
+    environment: ArgoCdApplicationSummary["environment"];
+    image: string;
+    chartVersion: string;
+    syncStatus: string;
+    healthStatus: string;
+    approvalStatus: ArgoCdApplicationSummary["approvalStatus"];
+  }>;
+  prodBehind: boolean;
+};
+
+export type ArgoCdProjectSummary = {
+  name: string;
+  description: string;
+  sourceRepos: string[];
+  destinations: Array<{ server: string; namespace: string }>;
+  orphanedResourcesEnabled: boolean;
+  applicationCount: number;
+  syncedCount: number;
+  outOfSyncCount: number;
+  healthyCount: number;
+  degradedCount: number;
+  applications: ArgoCdApplicationSummary[];
+};
+
+export type ArgoCdDashboard = {
+  instance: ArgoCdInstanceSummary;
+  projects: ArgoCdProjectSummary[];
+  applications: ArgoCdApplicationSummary[];
+  totals: ArgoCdDashboardTotals;
+  promotion: ArgoCdPromotionGroup[];
+};
+
+export type ArgoCdInstanceSummary = {
+  id: string;
+  name: string;
+  url: string;
+  authMode: "token" | "basic" | "sso";
+};
+
 export interface TicketingApi {
   createTicket(input: CreateTicketInput, requester: PortalUser): Promise<TicketDetail>;
   listTickets(user: PortalUser, filters: TicketFilters): Promise<TicketSummary[]>;

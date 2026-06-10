@@ -1,4 +1,11 @@
-import type { AdminTicketUpdate, PortalUser, RequestTypeDefinition, TicketDetail, TicketSummary } from "../server/types";
+import type {
+  AdminTicketUpdate,
+  ArgoCdDashboard,
+  PortalUser,
+  RequestTypeDefinition,
+  TicketDetail,
+  TicketSummary
+} from "../server/types";
 
 export type DemoUserRole = "regular" | "admin";
 
@@ -62,6 +69,10 @@ export function getMe() {
 
 export function getRequestTypes() {
   return request<{ requestTypes: RequestTypeDefinition[] }>("/api/request-types");
+}
+
+export function listArgoCdProjects() {
+  return request<ArgoCdDashboard>("/api/argocd/projects");
 }
 
 export function listTickets(params: { scope: "mine" | "team"; status?: string; query?: string }) {
