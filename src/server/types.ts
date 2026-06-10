@@ -1,0 +1,95 @@
+export type CustomerStage =
+  | "Submitted"
+  | "Triaged"
+  | "In Progress"
+  | "Waiting on Customer"
+  | "Resolved"
+  | "Closed";
+
+export type TicketScope = "mine" | "team";
+
+export type PortalUser = {
+  id: string;
+  email: string;
+  displayName: string;
+  groups: string[];
+};
+
+export type TicketComment = {
+  id: string;
+  authorName: string;
+  authorId: string;
+  body: string;
+  createdAt: string;
+};
+
+export type TicketSummary = {
+  id: string;
+  title: string;
+  requestType: string;
+  requesterId: string;
+  requesterName: string;
+  teamGroups: string[];
+  rawStatus: string;
+  stage: CustomerStage;
+  createdAt: string;
+  updatedAt: string;
+  lastActivityAt: string;
+};
+
+export type TicketDetail = TicketSummary & {
+  description: string;
+  metadata: Record<string, string>;
+  comments: TicketComment[];
+};
+
+export type RequestFieldDefinition = {
+  name: string;
+  label: string;
+  type: "text" | "textarea" | "select";
+  required: boolean;
+  options?: string[];
+};
+
+export type RequestTypeDefinition = {
+  id: string;
+  name: string;
+  description: string;
+  ownerTeam: string;
+  fields: RequestFieldDefinition[];
+};
+
+export type TicketFilters = {
+  scope: TicketScope;
+  status?: CustomerStage;
+  query?: string;
+};
+
+export type AdminTicketFilters = {
+  status?: CustomerStage;
+  query?: string;
+};
+
+export type CreateTicketInput = {
+  requestType: string;
+  fields: Record<string, string>;
+  idempotencyKey?: string;
+};
+
+export type AdminTicketUpdate = {
+  stage?: CustomerStage;
+  rawStatus?: string;
+  title?: string;
+  teamGroups?: string[];
+};
+
+export interface TicketingApi {
+  createTicket(input: CreateTicketInput, requester: PortalUser): Promise<TicketDetail>;
+  listTickets(user: PortalUser, filters: TicketFilters): Promise<TicketSummary[]>;
+  getTicket(ticketId: string, user: PortalUser): Promise<TicketDetail | null>;
+  addComment(ticketId: string, user: PortalUser, body: string): Promise<TicketComment>;
+  listAdminTickets(filters: AdminTicketFilters): Promise<TicketSummary[]>;
+  getAdminTicket(ticketId: string): Promise<TicketDetail | null>;
+  updateAdminTicket(ticketId: string, admin: PortalUser, update: AdminTicketUpdate): Promise<TicketDetail>;
+  addAdminComment(ticketId: string, admin: PortalUser, body: string): Promise<TicketComment>;
+}
