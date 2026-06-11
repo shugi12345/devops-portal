@@ -211,6 +211,8 @@ export type BranchMicroserviceSnapshot = {
   valuesPath?: string;
   templateHash?: string;
   valuesHash?: string;
+  templateParameters?: Record<string, string>;
+  valuesParameters?: Record<string, string>;
   imageRepository?: string;
   imageTag?: string;
   replicaCount?: number;

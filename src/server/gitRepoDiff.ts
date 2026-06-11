@@ -56,6 +56,105 @@ function resourceIds(templateText: string | undefined) {
     .filter(Boolean) as Array<{ kind: string; name: string; apiVersion: string }>;
 }
 
+function documentLabel(document: string, index: number) {
+  const kind = scalar(document, /^kind:\s*([^\n]+)/m) ?? `Document${index + 1}`;
+  const name = scalar(document, /^\s+name:\s*([^\n]+)/m);
+  return name ? `${kind}/${name}` : kind;
+}
+
+function flattenYamlDocument(document: string) {
+  const values: Record<string, string> = {};
+  const stack: Array<{ indent: number; path: string }> = [];
+  const listIndexes = new Map<string, number>();
+
+  for (const rawLine of document.replace(/\r\n/g, "\n").split("\n")) {
+    if (!rawLine.trim() || rawLine.trim().startsWith("#")) continue;
+
+    const indent = rawLine.match(/^\s*/)?.[0].length ?? 0;
+    const line = rawLine.trim();
+    if (line === "---") continue;
+
+    while (stack.length > 0 && indent <= stack[stack.length - 1].indent) {
+      stack.pop();
+    }
+
+    const parent = stack.at(-1)?.path ?? "";
+
+    if (line.startsWith("- ")) {
+      const listKey = `${parent}|${indent}`;
+      const index = listIndexes.get(listKey) ?? 0;
+      listIndexes.set(listKey, index + 1);
+      const itemPath = `${parent}[${index}]`;
+      const item = line.slice(2).trim();
+      stack.push({ indent, path: itemPath });
+
+      const inline = item.match(/^([^:]+):\s*(.*)$/);
+      if (inline) {
+        const pathKey = `${itemPath}.${inline[1].trim()}`;
+        const value = inline[2].trim();
+        if (value) values[pathKey] = value.replace(/^["']|["']$/g, "");
+      }
+      continue;
+    }
+
+    const pair = line.match(/^([^:]+):\s*(.*)$/);
+    if (!pair) continue;
+
+    const key = pair[1].trim();
+    const value = pair[2].trim();
+    const pathKey = parent ? `${parent}.${key}` : key;
+
+    if (value) {
+      values[pathKey] = value.replace(/^["']|["']$/g, "");
+    } else {
+      stack.push({ indent, path: pathKey });
+    }
+  }
+
+  return values;
+}
+
+function flattenYamlParameters(text: string | undefined) {
+  const values: Record<string, string> = {};
+  if (!text) return values;
+
+  text
+    .replace(/\r\n/g, "\n")
+    .split(/^---$/m)
+    .forEach((document, index) => {
+      const label = documentLabel(document, index);
+      for (const [key, value] of Object.entries(flattenYamlDocument(document))) {
+        values[`${label}.${key}`] = value;
+      }
+    });
+
+  return values;
+}
+
+function yamlParameterDiffs(
+  snapshots: Record<string, BranchMicroserviceSnapshot>,
+  getter: (snapshot: BranchMicroserviceSnapshot) => Record<string, string> | undefined
+) {
+  const keys = new Set<string>();
+  for (const snapshot of Object.values(snapshots)) {
+    for (const key of Object.keys(getter(snapshot) ?? {})) {
+      keys.add(key);
+    }
+  }
+
+  return Array.from(keys)
+    .sort()
+    .map((key) => {
+      const values = Object.fromEntries(branches.map((branch) => [branch, getter(snapshots[branch])?.[key] ?? "missing"]));
+      return { key, values };
+    })
+    .filter((field) => new Set(Object.values(field.values)).size > 1);
+}
+
+function formatYamlParameterDiff(diff: { key: string; values: Record<string, string> }) {
+  return `${diff.key}: ${branches.map((branch) => `${branch.replace("payments-", "")}=${diff.values[branch]}`).join(", ")}.`;
+}
+
 function extractSnapshot(branch: string, microservice: string): BranchMicroserviceSnapshot {
   const templatePath = path.join(repoRoot, branch, "templates", `${microservice}.yaml`);
   const valuesPath = path.join(repoRoot, branch, "values", `${microservice}-values.yaml`);
@@ -79,6 +178,8 @@ function extractSnapshot(branch: string, microservice: string): BranchMicroservi
     valuesPath: values ? `values/${microservice}-values.yaml` : undefined,
     templateHash: template ? hash(template) : undefined,
     valuesHash: values ? hash(values) : undefined,
+    templateParameters: flattenYamlParameters(template),
+    valuesParameters: flattenYamlParameters(values),
     imageRepository: valuesImageRepo,
     imageTag: valuesImageTag,
     replicaCount: numberScalar(values, /^replicaCount:\s*(\d+)/m) ?? numberScalar(template, /^\s+replicas:\s*(\d+)/m),
@@ -147,6 +248,8 @@ function analyzeMicroservice(name: string): BranchDiffMicroservice {
   const missingBranches = branches.filter((branch) => !snapshots[branch].exists);
   const templateDrift = branches.some((branch) => snapshots[branch].templateHash !== baseline.templateHash);
   const valuesDrift = branches.some((branch) => snapshots[branch].valuesHash !== baseline.valuesHash);
+  const templateParameterDiffs = yamlParameterDiffs(snapshots, (snapshot) => snapshot.templateParameters);
+  const valuesParameterDiffs = yamlParameterDiffs(snapshots, (snapshot) => snapshot.valuesParameters);
   const importantFields = [
     fieldDiff("image.tag", "low", snapshots, (snapshot) => snapshot.imageTag),
     fieldDiff("replicaCount", "low", snapshots, (snapshot) => snapshot.replicaCount),
@@ -202,10 +305,12 @@ function analyzeMicroservice(name: string): BranchDiffMicroservice {
   if (templateDrift) {
     badges.push("Template changed");
     templateDiffs.push("Template hash differs between branches.");
+    templateDiffs.push(...templateParameterDiffs.map(formatYamlParameterDiff));
   }
   if (valuesDrift) {
     badges.push("Values changed");
     valuesDiffs.push("Values hash differs between branches.");
+    valuesDiffs.push(...valuesParameterDiffs.map(formatYamlParameterDiff));
   }
   if (snapshots["payments-prd"].templateHash !== snapshots["payments-preprod"].templateHash) {
     badges.push("Prod drift");

@@ -128,6 +128,11 @@ describe("portal API", () => {
     expect(
       response.body.microservices.find((service: { name: string }) => service.name === "reports-api").missingBranches
     ).toContain("payments-secure-prd");
+    expect(
+      response.body.microservices
+        .find((service: { name: string }) => service.name === "payment-api")
+        .templateDiffs.some((diff: string) => diff.includes("livenessProbe.httpGet.path"))
+    ).toBe(true);
   });
 
   it("returns a clear Argo CD error when the configured server is unavailable", async () => {
