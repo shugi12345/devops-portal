@@ -185,12 +185,24 @@ async function requestArgoCd<T>(config: ArgoCdConfig, path: string, options: Req
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
   }
 
-  const response = await fetch(`${config.url}${path}`, options);
+  let response: Response;
+  try {
+    response = await fetch(`${config.url}${path}`, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "connection failed";
+    throw new Error(`Argo CD request failed for ${config.url}${path}: ${message}`);
+  }
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     throw new Error(body || `Argo CD request failed: ${response.status}`);
   }
-  return response.json() as Promise<T>;
+
+  try {
+    return (await response.json()) as T;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "invalid JSON";
+    throw new Error(`Argo CD response could not be parsed: ${message}`);
+  }
 }
 
 function annotation(app: ArgoCdApplication, key: string) {

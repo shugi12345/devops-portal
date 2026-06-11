@@ -1,5 +1,5 @@
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 
 function authed() {
@@ -12,6 +12,14 @@ function authed() {
 }
 
 describe("portal API", () => {
+  afterEach(() => {
+    delete process.env.ARGOCD_URL;
+    delete process.env.ARGOCD_AUTH_TOKEN;
+    delete process.env.ARGOCD_USERNAME;
+    delete process.env.ARGOCD_PASSWORD;
+    delete process.env.ARGOCD_INSECURE;
+  });
+
   it("returns the SSO-backed current user", async () => {
     const response = await authed().expect(200);
     expect(response.body.user).toMatchObject({
@@ -120,6 +128,19 @@ describe("portal API", () => {
     expect(
       response.body.microservices.find((service: { name: string }) => service.name === "reports-api").missingBranches
     ).toContain("payments-secure-prd");
+  });
+
+  it("returns a clear Argo CD error when the configured server is unavailable", async () => {
+    process.env.ARGOCD_URL = "https://127.0.0.1:1";
+    process.env.ARGOCD_INSECURE = "true";
+
+    const response = await request(createApp())
+      .get("/api/argocd/projects")
+      .set("x-user-id", "u-alex")
+      .set("x-user-groups", "team-alpha")
+      .expect(502);
+
+    expect(response.body.error).toContain("Argo CD");
   });
 
   it("lets admins list, update, and respond to any ticket", async () => {
