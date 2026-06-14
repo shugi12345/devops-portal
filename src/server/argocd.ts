@@ -194,7 +194,8 @@ async function requestArgoCd<T>(config: ArgoCdConfig, path: string, options: Req
   }
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(body || `Argo CD request failed: ${response.status}`);
+    const detail = body ? `: ${body}` : "";
+    throw new Error(`Argo CD request failed for ${config.url}${path}: HTTP ${response.status}${detail}`);
   }
 
   try {

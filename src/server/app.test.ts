@@ -1,5 +1,5 @@
 import request from "supertest";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 
 function authed() {
@@ -18,6 +18,7 @@ describe("portal API", () => {
     delete process.env.ARGOCD_USERNAME;
     delete process.env.ARGOCD_PASSWORD;
     delete process.env.ARGOCD_INSECURE;
+    vi.unstubAllGlobals();
   });
 
   it("returns the SSO-backed current user", async () => {
@@ -146,6 +147,24 @@ describe("portal API", () => {
       .expect(502);
 
     expect(response.body.error).toContain("Argo CD");
+  });
+
+  it("returns a clear Argo CD error when the configured server rejects auth", async () => {
+    process.env.ARGOCD_URL = "https://argocd.example.test";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: "no session information" }), { status: 401 }))
+    );
+
+    const response = await request(createApp())
+      .get("/api/argocd/projects")
+      .set("x-user-id", "u-alex")
+      .set("x-user-groups", "team-alpha")
+      .expect(502);
+
+    expect(response.body.error).toContain("Argo CD request failed");
+    expect(response.body.error).toContain("HTTP 401");
+    expect(response.body.error).toContain("no session information");
   });
 
   it("lets admins list, update, and respond to any ticket", async () => {
